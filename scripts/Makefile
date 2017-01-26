@@ -29,5 +29,9 @@ install:
 
 uninstall:
 
+.PHONY += clean distclean
 clean:
-	$(RM) -r build autoconf.h .config *~
+	$(RM) -r build *~
+
+distclean: clean
+	$(RM) ../.config ../software/include/autoconf.h

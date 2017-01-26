@@ -14,9 +14,12 @@
 # limitations under the License.
 #
 
-subdirs += software scripts
+config_subdirs += scripts
+software_subdirs += software
 hardware_subdirs += hardware
 action_subdirs += hardware/action_examples
+
+subdirs += $(software_subdirs) $(config_subdirs)
 
 all: $(subdirs)
 
@@ -43,7 +46,15 @@ config model image:
                 fi					\
 	done
 
-clean:
+# Config
+menuconfig xconfig gconfig oldconfig:
+	@for dir in $(config_subdirs); do		\
+	       	if [ -d $$dir ]; then			\
+			$(MAKE) -C $$dir $@ || exit 1;	\
+                fi					\
+	done
+
+clean distclean:
 	@for dir in $(subdirs) $(hardware_subdirs) $(action_subdirs); do \
 		if [ -d $$dir ]; then			\
 			$(MAKE) -C $$dir $@ || exit 1;	\
