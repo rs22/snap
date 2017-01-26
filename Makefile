@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-subdirs += software
+subdirs += software scripts
 hardware_subdirs += hardware
 action_subdirs += hardware/action_examples
 
