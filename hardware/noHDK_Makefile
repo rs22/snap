@@ -51,7 +51,6 @@ endif
 ifeq "$(DDR4_USED)" "TRUE"
 export DDRI_USED=TRUE
 endif
-
 ifeq "$(BRAM_USED)" "TRUE"
 export DDRI_USED=TRUE
 endif
@@ -74,7 +73,7 @@ check_donut_settings:
 		echo "Please source donut_settings before calling make!"; \
 		exit 1; \
 	fi
-	@if [[ $(SIMULATOR) != "ncsim" && $(SIMULATOR) != "irun" && $(SIMULATOR) != "xsim" && $(SIMULATOR) != "questa" ]];then \
+	@if [[ $(SIMULATOR) != "irun" && $(SIMULATOR) != "xsim" && $(SIMULATOR) != "questa" ]];then \
 		echo "unknown simulator=$SIMULATOR"; \
 		exit 1; \
 	fi
@@ -185,13 +184,6 @@ irun:
 	@time vivado $(MSG_LEVEL) -mode batch -source setup/export_irun.tcl -notrace -log compile_$(SIMULATOR).log
 	$(DONUT_HARDWARE_ROOT)/setup/patch_sim.sh $(DONUT_HARDWARE_ROOT)/sim/ies top.sh >>compile_$(SIMULATOR).log 2>&1
 	cd $(DONUT_HARDWARE_ROOT)/sim/ies; ln -sf $(PSLSE_ROOT)/afu_driver/src/libdpi.so; ./top.sh
-
-ncsim:
-	@echo -e "\t[BUILD ncsim.......] start `date`"
-	@if [ -f $(DONUT_HARDWARE_ROOT)/sim/ies/top.sh ];then rm -rf $(DONUT_HARDWARE_ROOT)/sim/ies;fi
-	@time vivado $(MSG_LEVEL) -mode batch -source setup/export_ncsim.tcl -notrace -log compile_$(SIMULATOR).log
-	$(DONUT_HARDWARE_ROOT)/setup/patch_sim.sh $(DONUT_HARDWARE_ROOT)/sim/ies top.sh >>compile_$(SIMULATOR).log 2>&1
-	cd $(DONUT_HARDWARE_ROOT)/sim/ies && ln -sf $(PSLSE_ROOT)/afu_driver/src/libdpi.so && ./top.sh >>compile_$(SIMULATOR).log 2>&1
 
 questa:
 	@echo -e "\t[BUILD questa......] start `date`"
