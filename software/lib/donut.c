@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <sys/time.h>
 
@@ -28,19 +29,17 @@
 #include <donut_tools.h>
 #include <donut_internal.h>
 #include <donut_queue.h>
-
-#define timediff_usec(t0, t1)						\
-	((double)(((t0)->tv_sec * 1000000 + (t0)->tv_usec) -		\
-		  ((t1)->tv_sec * 1000000 + (t1)->tv_usec)))
+#include <snap_s_regs.h>	/* Include SNAP Slave Regs */
 
 /* Trace hardware implementation */
 static unsigned int dnut_trace = 0x0;
 static unsigned int dnut_config = 0x0;
 static struct dnut_action *actions = NULL;
 
-#define dnut_trace_enabled()  (dnut_trace & 0x1)
-#define reg_trace_enabled()   (dnut_trace & 0x2)
-#define sim_trace_enabled()   (dnut_trace & 0x4)
+#define dnut_trace_enabled()  (dnut_trace & 0x01)
+#define reg_trace_enabled()   (dnut_trace & 0x02)
+#define sim_trace_enabled()   (dnut_trace & 0x04)
+#define poll_trace_enabled()  (dnut_trace & 0x10)
 
 int action_trace_enabled(void)
 {
@@ -64,124 +63,169 @@ int action_trace_enabled(void)
 			fprintf(stderr, "S " fmt, ## __VA_ARGS__);	\
 	} while (0)
 
-#define	FW_BASE_ADDR		0x00100
-#define	FW_BASE_ADDR8		0x00108
+#define poll_trace(fmt, ...) do {					\
+		if (poll_trace_enabled())				\
+			fprintf(stderr, "P " fmt, ## __VA_ARGS__);	\
+	} while (0)
 
-/* FIXME Some of those addresses will be hidden in libdonut on future
-   releases. */
-
-/* TO BE REMOVED ACTION Specific register setup */
-#define	ACTION_4		(ACTION_BASE + 0x04)
-#define	ACTION_8		(ACTION_BASE + 0x08)
-
-#define	ACTION_CONFIG		(ACTION_BASE + 0x10)
-#define ACTION_CONFIG_COUNT	  0x00000001
-#define	ACTION_CONFIG_COPY	  0x00000002
-
-#define	ACTION_SRC_LOW		(ACTION_BASE + 0x14)
-#define	ACTION_SRC_HIGH		(ACTION_BASE + 0x18)
-#define	ACTION_DEST_LOW		(ACTION_BASE + 0x1c)
-#define	ACTION_DEST_HIGH	(ACTION_BASE + 0x20)
-#define	ACTION_CNT		(ACTION_BASE + 0x24)	/* Count Register */
-
-struct wed {
-	uint64_t res[16];
-};
+#define	INVALID_SAT 0x0ffffffff
 
 struct dnut_data {
 	void *priv;
 	struct cxl_afu_h *afu_h;
+	bool master;		/* True if this is Master Device */
+	int cir;		/* Context id */
+	uint32_t action_base;
 	uint16_t vendor_id;
 	uint16_t device_id;
-	uint16_t action_type;
+	uint32_t action_type;	/* Action Type */
+	uint32_t sat;		/* short Action Type */
+	bool start_attach;
+	int mode;
+	uint16_t seq;		/* Seq Number */
 	int afu_fd;
 
-	struct wed *wed;
 	struct dnut_action *action; /* software simulation mode */
+	size_t errinfo_size;
+	void *errinfo;		/* Err info Buffer */
+	struct cxl_event event;
 };
 
 /* To be used for software simulation, use funcs provided by action */
 static int dnut_map_funcs(struct dnut_data *card, uint16_t action_type);
 
-/**********************************************************************
- * DIRECT CARD ACCESS
- *********************************************************************/
+/*	Get Time in msec */
+static unsigned int tget_ms(void)
+{
+	struct timeval now;
+	unsigned int tms;
+
+	gettimeofday(&now, NULL);
+	tms = (unsigned int)(now.tv_sec * 1000) +
+		(unsigned int)(now.tv_usec / 1000);
+	return tms;
+}
 
 static void *hw_dnut_card_alloc_dev(const char *path, uint16_t vendor_id,
 				    uint16_t device_id)
 {
 	struct dnut_data *dn;
 	struct cxl_afu_h *afu_h = NULL;
-	struct wed *wed = NULL;
+	uint64_t reg;
 	int rc;
+	long id = 0;
 
 	dn = calloc(1, sizeof(*dn));
 	if (NULL == dn)
 		goto __dnut_alloc_err;
 
 	dn->priv = NULL;
-	dn->vendor_id = vendor_id;
-	dn->device_id = device_id;
 
+	dnut_trace("%s Enter %s\n", __func__, path);
 	afu_h = cxl_afu_open_dev((char*)path);
 	if (NULL == afu_h)
 		goto __dnut_alloc_err;
 
-	/* FIXME Why is wed not part of dn and dn not allocated with
-	   alignment in that case? Can we have wed to be NULL to save
-	   that step? */
-	if (posix_memalign((void **)&wed, CACHELINE_BYTES,
-			   sizeof(struct wed))) {
-		perror("posix_memalign");
-		goto __dnut_alloc_err;
+	dn->sat = INVALID_SAT;	/* Invalid Short Action Type stands for not attached */
+	dn->action_type = 0xffffffff;
+	dn->vendor_id = vendor_id;
+	/* Read and check Vendor id if it was given by caller */
+	if (0xffff != vendor_id) {
+		rc = cxl_get_cr_vendor(afu_h, 0, &id);
+		if ((0 != rc) || ((uint16_t)id != vendor_id)) {
+			dnut_trace("  %s: ERR Vendor 0x%x Invalid Expect 0x%x\n",
+				__func__, (int)id, (int)vendor_id);
+			goto __dnut_alloc_err; }
+		dn->vendor_id = (uint16_t)id;
 	}
 
-	dn->wed = wed;	/* Save */
-	dn->afu_h = afu_h;
-	dn->afu_fd = cxl_afu_fd(dn->afu_h);
-	rc = cxl_afu_attach(dn->afu_h, (uint64_t)wed);
+	dn->device_id = device_id;
+	/* Read and check Device id if it was given by caller */
+	if (0xffff != device_id) {
+		rc = cxl_get_cr_device(afu_h, 0, &id);
+		if ((0 != rc) || ((uint16_t)id != device_id)) {
+			dnut_trace("  %s: ERR Device 0x%x Invalid Expect 0x%x\n",
+				__func__, (int)id, (int)device_id);
+			goto __dnut_alloc_err;
+		}
+		dn->device_id = (uint16_t)id;
+        }
+
+	/* Create Err Buffer, If we cannot get it, continue with warning ... */
+	dn->errinfo_size = 0;
+	dn->errinfo = NULL;
+	rc = cxl_errinfo_size(afu_h, &dn->errinfo_size);
+	if (0 == rc) {
+		dn->errinfo = malloc(dn->errinfo_size);
+                if (NULL == dn->errinfo) {
+			perror("malloc");
+			goto __dnut_alloc_err;
+                }
+        } else
+		dnut_trace("  %s: WARN Can not detect Err buffer\n", __func__);
+
+
+	dnut_trace("  %s: errinfo_size: %d VendorID: %x DeviceID: %x\n", __func__,
+		(int)dn->errinfo_size, (int)vendor_id, (int)device_id);
+	dn->afu_fd = cxl_afu_fd(afu_h);
+	rc = cxl_afu_attach(afu_h, 0);
 	if (0 != rc)
 		goto __dnut_alloc_err;
 
-	if (cxl_mmio_map(dn->afu_h, CXL_MMIO_BIG_ENDIAN) == -1)
+	if (cxl_mmio_map(afu_h, CXL_MMIO_BIG_ENDIAN) == -1) {
+		dnut_trace("  %s: Error Can not mmap\n", __func__);
 		goto __dnut_alloc_err;
+	}
 
+	dn->action_base = 0;
+	cxl_mmio_read64(afu_h, SNAP_S_CIR, &reg);
+	if (0x8000000000000000 & reg)
+		dn->master = true;
+	else	dn->master = false;
+	dn->cir = (int)(reg & 0xffff);
+	dn->afu_h = afu_h;
+	dnut_trace("%s Exit %p OK Context: %d Master: %d\n", __func__,
+		dn, dn->cir, dn->master);
 	return (struct dnut_card *)dn;
 
  __dnut_alloc_err:
+	if (dn->errinfo)
+		free(dn->errinfo);
 	if (afu_h)
 		cxl_afu_free(afu_h);
-	if (wed)
-		free(wed);
 	if (dn)
 		free(dn);
+	dnut_trace("%s Exit Err\n", __func__);
 	return NULL;
 }
 
-static int hw_dnut_mmio_write32(void *_card, uint64_t offset, uint32_t data)
+static int hw_dnut_mmio_write32(void *_card,
+		uint64_t offset, uint32_t data)
 {
 	int rc = -1;
 	struct dnut_data *card = (struct dnut_data *)_card;
 
-	reg_trace("  %s(%p, %llx, %lx)\n", __func__, _card,
-		  (long long)offset, (long)data);
-
-	if ((card) && (card->afu_h))
+	if ((card) && (card->afu_h)) {
+		offset += (uint64_t)card->action_base;
+		reg_trace("  %s(%p, %llx, %lx)\n", __func__, _card,
+			(long long)offset, (long)data);
 		rc = cxl_mmio_write32(card->afu_h, offset, data);
+	} else reg_trace("  %s Error\n", __func__);
 	return rc;
 }
 
 static int hw_dnut_mmio_read32(void *_card,
-			      uint64_t offset, uint32_t *data)
+		uint64_t offset, uint32_t *data)
 {
 	int rc = -1;
 	struct dnut_data *card = (struct dnut_data *)_card;
 
-	if ((card) && (card->afu_h))
+	if ((card) && (card->afu_h)) {
+		offset += (uint64_t)card->action_base;
 		rc = cxl_mmio_read32(card->afu_h, offset, data);
-
-	reg_trace("  %s(%p, %llx, %lx) %d\n", __func__, _card,
-		  (long long)offset, (long)*data, rc);
+		reg_trace("  %s(%p, %llx, %lx) %d\n", __func__, _card,
+			(long long)offset, (long)*data, rc);
+	} else reg_trace("  %s Error\n", __func__);
 
 	return rc;
 }
@@ -193,7 +237,6 @@ static int hw_dnut_mmio_write64(void *_card, uint64_t offset, uint64_t data)
 
 	reg_trace("  %s(%p, %llx, %llx)\n", __func__, _card,
 		  (long long)offset, (long long)data);
-
 	if ((card) && (card->afu_h))
 		rc = cxl_mmio_write64(card->afu_h, offset, data);
 	return rc;
@@ -206,7 +249,6 @@ static int hw_dnut_mmio_read64(void *_card, uint64_t offset, uint64_t *data)
 
 	if ((card) && (card->afu_h))
 		rc = cxl_mmio_read64(card->afu_h, offset, data);
-
 	reg_trace("  %s(%p, %llx, %llx) %d\n", __func__, _card,
 		  (long long)offset, (long long)*data, rc);
 
@@ -218,15 +260,150 @@ static void hw_dnut_card_free(void *_card)
 	struct dnut_data *card = (struct dnut_data *)_card;
 
 	if (card) {
+		if (card->errinfo)
+			free(card->errinfo);
 		cxl_afu_free(card->afu_h);
-		free(card->wed);
 		free(card);
 	}
+}
+
+static int hw_wait_irq(void *_card, int irq, int timeout_sec)
+{
+	fd_set  set;
+	struct  timeval timeout;
+	int rc = 0;
+
+	struct dnut_data *card = (struct dnut_data *)_card;
+	dnut_trace("  %s: Enter fd: %d irq: %d mode: 0x%x\n", __func__,
+		card->afu_fd, irq, card->mode);
+
+	if (!cxl_event_pending(card->afu_h)) {
+		timeout.tv_sec = timeout_sec;
+		timeout.tv_usec = 0;
+		FD_ZERO(&set);
+		FD_SET(card->afu_fd, &set);
+
+		rc = select(card->afu_fd +1, &set, NULL, NULL, &timeout);
+		if (0 == rc)
+			rc = EBUSY;
+		else if ((rc == -1) && (errno == EINTR))
+			rc = EINTR;
+		else rc = 0;
+	} else
+		dnut_trace("    Event is Pending ......\n");
+	if (0 == rc) {
+		rc = cxl_read_event(card->afu_h, &card->event);
+		//cxl_fprint_event(stdout, card->event);
+		switch (card->event.header.type) {
+		case CXL_EVENT_AFU_INTERRUPT:
+			dnut_trace("  %s:     Event flags: %d irq: %d (expect:%d)\n", __func__,
+				card->event.irq.flags, card->event.irq.irq, irq);
+			rc = 0;
+			break;
+		case CXL_EVENT_DATA_STORAGE:
+		case CXL_EVENT_AFU_ERROR:
+		//case CXL_EVENT_READ_FAIL:
+		default:
+			dnut_trace("  %s: AFU_ERROR %d flags: 0x%x error: 0x%016llx\n",
+				__func__, card->event.header.type,
+				card->event.afu_error.flags,
+				(long long)card->event.afu_error.error);
+			rc = EINTR;
+			break;
+		}
+	}
+	dnut_trace("  %s: Exit fd: %d rc: %d\n", __func__,
+		card->afu_fd, rc);
+	return rc;
+}
+
+static int hw_attach_action(void *_card, uint32_t action, int flags, int timeout_sec)
+{
+	struct dnut_data *card = (struct dnut_data *)_card;
+	int i, rc = 0;
+	uint64_t data;
+	uint32_t sat = INVALID_SAT;	/* Invalid short Action type */
+	int maid;			/* Max Acition Id's */
+	int t0, dt;
+
+	dnut_trace("%s Enter Action: 0x%x Old Action: 0x%x Flags: 0x%x Base: 0x%x timeout: %d sec\n", __func__,
+		action, card->action_type, flags, card->action_base, timeout_sec);
+	if (card->master) {
+		dnut_trace("%s Exit Error Master is not allowed to use  Action\n",  __func__);
+		return ENODEV;
+	}
+	if (action != card->action_type) {
+		hw_dnut_mmio_read64(card, SNAP_S_SSR, &data);
+		/* Check if configure Slave s done */
+		if (0x100 != (data & 0x100)) {
+			dnut_trace("%s Error AFU SLAVE need's setup\n", __func__);
+			return ENODEV;
+		}
+		maid = (int)(data & 0xf) + 1;	/* Max Actions */
+		/* Search action to get Short Action type */
+		for (i = 0; i < maid; i++) {
+			hw_dnut_mmio_read64(card, SNAP_S_ATRI + i*8, &data);
+			if (action == (uint32_t)(data & 0xffffffff)) {
+				sat = (uint32_t)(data >>  32ll); /* Short Action Type */
+				break;	/* Found */
+			}
+		}
+		if (INVALID_SAT == sat) {
+			dnut_trace("%s Exit Error Can not find Action\n",  __func__);
+			return ENODEV;
+		}
+		card->mode = flags;		/* Get IRQ Flags bit 0,1,2 + 3 */
+		card->sat = sat;		/* Save short Action Type */
+		card->seq = 0xf000;
+		card->action_type = action;
+		data = ((uint64_t)card->seq << 48ll);
+		data |= (card->sat << 12) | (card->mode & 0x07);	/* Short Action Type and Direct Access */
+		hw_dnut_mmio_write64(card, SNAP_S_CCR, data);
+		card->start_attach = true;
+		card->action_base = ACTION_BASE_S;
+	}
+
+	if (card->start_attach) {
+		card->start_attach = false;
+		data = ((uint64_t)card->seq << 48ll) | 1;	/* Start: Attach action to context */
+		hw_dnut_mmio_write64(card, SNAP_S_JCR, data);
+	}
+
+	if (SNAP_CCR_IRQ_ATTACH & card->mode)
+		rc = hw_wait_irq(_card, 2, timeout_sec);
+	else {
+		t0 = tget_ms();
+		dt = 0;
+		rc = EBUSY;
+		while (dt < (timeout_sec*1000)) {
+			hw_dnut_mmio_read64(card, SNAP_S_CSR, &data);
+			if (0xC0 == (data & 0xC0)) {
+				rc = 0;
+				break;
+			}
+			dt = tget_ms() - t0;
+		}
+	}
+	if (0 == rc)
+		card->seq++;
+	dnut_trace("%s Exit rc: %d Action Base: 0x%x\n", __func__,
+		rc, card->action_base);
+	return rc;
+}
+
+static int hw_detach_action(void *_card)
+{
+	struct dnut_data *card = (struct dnut_data*)_card;
+	card->start_attach = true;			/* Set Flag to Attach next Time again */
+	hw_dnut_mmio_write64(card, SNAP_S_JCR, 2);	/* Stop:  Detach action */
+	return 0;
 }
 
 /* Hardware version of the lowlevel functions */
 static struct dnut_funcs hardware_funcs = {
 	.card_alloc_dev = hw_dnut_card_alloc_dev,
+	.attach_action = hw_attach_action,	/* attach Action */
+	.detach_action = hw_detach_action,	/* detach Action */
 	.mmio_write32 = hw_dnut_mmio_write32,
 	.mmio_read32 = hw_dnut_mmio_read32,
 	.mmio_write64 = hw_dnut_mmio_write64,
@@ -242,6 +419,20 @@ struct dnut_card *dnut_card_alloc_dev(const char *path,
 				      uint16_t device_id)
 {
 	return df->card_alloc_dev(path, vendor_id, device_id);
+}
+
+int dnut_attach_action(struct dnut_card *_card,
+		      uint32_t action, int flags, int timeout_ms)
+{
+	return df->attach_action(_card, action, flags, timeout_ms);
+}
+
+int dnut_detach_action(struct dnut_card *_card)
+{
+	dnut_trace("%s Enter\n", __func__);
+	df->detach_action(_card);
+	dnut_trace("%s Exit\n", __func__);
+	return 0;
 }
 
 int dnut_mmio_write32(struct dnut_card *_card,
@@ -309,7 +500,7 @@ int dnut_sync_execute_job(struct dnut_queue *queue,
 	uint32_t *job_data = (uint32_t *)(unsigned long)cjob->win_addr;
 
 	/* Action registers setup */
-	for (i = 0, action_addr = ACTION_CONFIG;
+	for (i = 0, action_addr = 0x10;	/* FIXME */
 	     i < cjob->win_size/sizeof(uint32_t);
 	     i++, action_addr += sizeof(uint32_t)) {
 
@@ -379,16 +570,30 @@ int dnut_kernel_stop(struct dnut_kernel *kernel __unused)
 	return 0;
 }
 
-int dnut_kernel_completed(struct dnut_kernel *kernel, int *rc)
+int dnut_kernel_completed(struct dnut_kernel *kernel, int irq, int *rc, int timeout)
 {
-	int _rc;
+	int _rc = 0;
 	uint32_t action_data = 0;
 	struct dnut_card *card = (struct dnut_card *)kernel;
+	int t0, dt, timeout_ms;
 
-	_rc = dnut_mmio_read32(card, ACTION_CONTROL, &action_data);
+	if (irq) {
+		hw_wait_irq((void*)kernel, irq, timeout);
+		_rc = dnut_mmio_read32(card, ACTION_CONTROL, &action_data);
+	} else {
+		/* Busy poll timout sec */
+		t0 = tget_ms();
+		dt = 0;
+		timeout_ms = timeout * 1000;
+		while (dt < timeout_ms) {
+			_rc = dnut_mmio_read32(card, ACTION_CONTROL, &action_data);
+			if ((action_data & ACTION_CONTROL_IDLE) == ACTION_CONTROL_IDLE)
+				break;
+			dt = tget_ms() - t0;
+		}
+	}
 	if (rc)
 		*rc = _rc;
-
 	return (action_data & ACTION_CONTROL_IDLE) == ACTION_CONTROL_IDLE;
 }
 
@@ -403,13 +608,13 @@ int dnut_kernel_completed(struct dnut_kernel *kernel, int *rc)
  */
 int dnut_kernel_sync_execute_job(struct dnut_kernel *kernel,
 				 struct dnut_job *cjob,
-				 unsigned int timeout_sec)
+				 unsigned int timeout_sec,
+				 int irq)
 {
 	int rc;
 	unsigned int i;
 	struct dnut_card *card = (struct dnut_card *)kernel;
 	uint32_t action_addr;
-	struct timeval etime, stime;
 	struct queue_workitem job; /* one cacheline job description and data */
 	uint32_t *job_data;
 	int completed;
@@ -463,17 +668,7 @@ int dnut_kernel_sync_execute_job(struct dnut_kernel *kernel,
 	if (rc != 0)
 		return rc;
 
-	/* Wait for Action to go back to Idle */
-	gettimeofday(&stime, NULL);
-	do {
-		dnut_trace("%s: CHECK COMPLETION\n", __func__);
-		completed = dnut_kernel_completed(kernel, &rc);
-		if (completed || rc != 0)
-			break;
-
-		gettimeofday(&etime, NULL);
-	} while (timediff_usec(&etime, &stime) < timeout_sec * 1000000);
-
+	completed = dnut_kernel_completed(kernel, irq, &rc, timeout_sec);
 	if (completed == 0) {
 		dnut_trace("%s: rc=%d completed=%d\n", __func__,
 			   rc, completed);
@@ -740,9 +935,23 @@ static int sw_mmio_read64(void *_card, uint64_t offs, uint64_t *data)
 	return rc;
 }
 
-/* Hardware version of the lowlevel functions */
+static int sw_attach_action(void *_card, uint32_t action, int flags, int timeout_ms)
+{
+	dnut_trace("  %s(%p, %x %d %d)\n", __func__, _card, action, flags, timeout_ms);
+	return 0;
+}
+
+static int sw_detach_action(void *_card)
+{
+	dnut_trace("  %s(%p)\n", __func__, _card);
+	return 0;
+}
+
+/* Software version of the lowlevel functions */
 static struct dnut_funcs software_funcs = {
 	.card_alloc_dev = sw_card_alloc_dev,
+	.attach_action = sw_attach_action,	/* attach Action */
+	.detach_action = sw_detach_action,	/* detach Action */
 	.mmio_write32 = sw_mmio_write32,
 	.mmio_read32 = sw_mmio_read32,
 	.mmio_write64 = sw_mmio_write64,

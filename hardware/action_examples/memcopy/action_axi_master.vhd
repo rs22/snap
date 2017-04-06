@@ -58,6 +58,7 @@ entity action_axi_master is
                 dma_rd_data_valid_o : out  std_logic;                     
                 dma_rd_data_last_o  : out  std_logic;                     
                 dma_rd_data_taken_i : in   std_logic;
+                dma_rd_context_id   : in   std_logic_vector(C_M_AXI_ARUSER_WIDTH - 1 downto 0);
                 
                                                                    
                 dma_wr_req_i        : in  std_logic;                     
@@ -68,7 +69,9 @@ entity action_axi_master is
                 dma_wr_data_strobe_i: in  std_logic_vector(C_M_AXI_DATA_WIDTH/8-1 downto 0);                     
                 dma_wr_data_last_i  : in  std_logic;                     
                 dma_wr_ready_o      : out  std_logic;                     
-                dma_wr_done_o       : out  std_logic;                     
+                dma_wr_bready_i     : in   std_logic;                     
+                dma_wr_done_o       : out  std_logic;
+                dma_wr_context_id   : in   std_logic_vector(C_M_AXI_AWUSER_WIDTH - 1 downto 0);
 
 	     	M_AXI_ACLK	: in std_logic;
 		M_AXI_ARESETN	: in std_logic;
@@ -184,7 +187,7 @@ begin
 	M_AXI_AWCACHE	<= "0010";
 	M_AXI_AWPROT	<= "000";
 	M_AXI_AWQOS	<= x"0";
-	M_AXI_AWUSER	<= (others => '1');
+	M_AXI_AWUSER	<= dma_wr_context_id;
 	M_AXI_AWVALID	<= axi_awvalid;
 	M_AXI_WDATA	<= axi_wdata;
 	M_AXI_WSTRB	<= axi_wstrb;
@@ -201,7 +204,7 @@ begin
 	M_AXI_ARCACHE	<= "0010";
 	M_AXI_ARPROT	<= "000";
 	M_AXI_ARQOS	<= x"0";
-	M_AXI_ARUSER	<= (others => '1');
+	M_AXI_ARUSER	<= dma_rd_context_id;
 	M_AXI_ARVALID	<= axi_arvalid;
 	M_AXI_RREADY	<= axi_rready;
 
@@ -227,7 +230,7 @@ axi_w:	process(M_AXI_ACLK)
                  axi_awvalid       <= '0';
                  wr_req_wait_cycle <= '1';
                end if;
-               axi_bready    <= '1';
+               axi_bready    <= dma_wr_bready_i;
                if M_AXI_BVALID = '1' then
                  dma_wr_done_o  <= '1';
                end if;
@@ -237,15 +240,37 @@ axi_w:	process(M_AXI_ACLK)
         end process;
 
 
-    axi_wdata           <= dma_wr_data_i;
-    axi_wvalid          <= or_reduce(dma_wr_data_strobe_i);
-    axi_wstrb           <= dma_wr_data_strobe_i;
-    axi_wlast           <= dma_wr_data_last_i;
-    dma_wr_ready_o      <= M_AXI_WREADY; --  and write_pending;
+    
+   
     axi_rready          <= dma_rd_data_taken_i;
     dma_rd_data_last_o  <= M_AXI_RLAST;
     dma_rd_data_valid_o <= M_AXI_RVALID;
     dma_rd_data_o       <= M_AXI_RDATA;
+
+
+axi_write_buffer:
+ process(M_AXI_ACLK,M_AXI_WREADY, axi_wvalid )
+     begin
+       if (rising_edge (M_AXI_ACLK)) then
+         if M_AXI_ARESETN = '0'  then
+            axi_wvalid         <= '0';
+         else
+           if M_AXI_WREADY = '1' or axi_wvalid = '0' then
+             axi_wdata           <= dma_wr_data_i;
+             axi_wvalid          <= or_reduce(dma_wr_data_strobe_i);
+             axi_wstrb           <= dma_wr_data_strobe_i;
+             axi_wlast           <= dma_wr_data_last_i;
+           end if;
+         end if;
+         
+       end if;
+       dma_wr_ready_o     <= '1';
+       if  M_AXI_WREADY = '0' and axi_wvalid = '1' then
+         dma_wr_ready_o   <= '0';
+       end if;  
+     end process;    
+
+        
 
 axi_r:	 process(M_AXI_ACLK)
 	     begin

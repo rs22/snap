@@ -15,12 +15,11 @@
 #
 ###############################################################################
 version
-#source xsaet.tcl				;# enabled through run_sim
- open_vcd {dump.vcd}
- log_vcd *
+#source xsaet.tcl                                 ;# enabled through run_sim
  set myrc [run 2000 ns]; puts "run2000 rc= $myrc" ;# assertions off until after 2800ns
 #run 50000 ns
- run -all					;# run forever, until application closes sim
- flush_vcd
- close_vcd
+ run -all                                         ;# run forever, until application closes sim
+#save_wave_config
+#flush_vcd
+#close_vcd
  exit
