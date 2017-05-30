@@ -328,7 +328,7 @@ connect_bd_net -net axi_pcie3_0_axi_ctl_aresetn [get_bd_pins axi_pcie3_0/axi_ctl
 connect_bd_net -net axi_pcie3_1_axi_aclk        [get_bd_pins axi_pcie3_1/axi_aclk]        [get_bd_pins axi_interconnect_0/M02_ACLK]    [get_bd_pins axi_interconnect_1/M01_ACLK] [get_bd_pins axi_interconnect_2/S01_ACLK]
 connect_bd_net -net axi_pcie3_1_axi_aresetn     [get_bd_pins axi_pcie3_1/axi_aresetn]     [get_bd_pins axi_interconnect_1/M01_ARESETN] [get_bd_pins axi_interconnect_2/S01_ARESETN]
 connect_bd_net -net axi_pcie3_1_axi_ctl_aresetn [get_bd_pins axi_pcie3_1/axi_ctl_aresetn] [get_bd_pins axi_interconnect_0/M02_ARESETN]
-connect_bd_net -net nvme_reset_n            [get_bd_ports nvme_reset_n] [get_bd_pins axi_pcie3_1/sys_rst_n]
+connect_bd_net -net nvme_reset_n            [get_bd_ports nvme_reset_n] [get_bd_pins axi_pcie3_1/sys_rst_n] [get_bd_pins axi_pcie3_0/sys_rst_n]
 #connect_bd_net -net axi_pcie3_0_axi_aclk [get_bd_pins axi_pcie3_0/axi_aclk] [get_bd_pins axi_interconnect_0/M01_ACLK] [get_bd_pins axi_interconnect_1/M00_ACLK] [get_bd_pins axi_interconnect_2/S00_ACLK]
 #connect_bd_net -net axi_pcie3_0_axi_aresetn [get_bd_pins axi_pcie3_0/axi_aresetn] [get_bd_pins axi_interconnect_0/M01_ARESETN] [get_bd_pins axi_interconnect_1/M00_ARESETN] [get_bd_pins axi_interconnect_2/S00_ARESETN]
 #connect_bd_net -net axi_pcie3_1_axi_aclk [get_bd_pins axi_pcie3_1/axi_aclk] [get_bd_pins axi_interconnect_0/M02_ACLK] [get_bd_pins axi_interconnect_1/M01_ACLK] [get_bd_pins axi_interconnect_2/S01_ACLK]
