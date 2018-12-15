@@ -206,7 +206,6 @@ choice
 		select DISABLE_SDRAM_AND_BRAM
 		select DISABLE_NVME
 
-
 	config BD_HELLOWORLD
 		bool "BD HelloWorld"
 		help
@@ -215,9 +214,7 @@ choice
 		  - Processing changing case of the text
 		  - Writing back the text to the server memory
 		  This example is written in C and compiled with HLS
-		depends on N250S
-		select FORCE_SDRAM_OR_BRAM
-		select FORCE_NVME
+		select DISABLE_NVME
 
 	config HLS_MEMCOPY
 		bool "HLS Memcopy"

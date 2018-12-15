@@ -412,7 +412,7 @@ ARCHITECTURE STRUCTURE OF action_wrapper IS
     m_axi_card_mem0_araddr : out STD_LOGIC_VECTOR ( 63 downto 0 );
     m_axi_card_mem0_arburst : out STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_arcache : out STD_LOGIC_VECTOR ( 3 downto 0 );
-    m_axi_card_mem0_arid : out STD_LOGIC_VECTOR ( 3 downto 0 );
+    m_axi_card_mem0_arid : out STD_LOGIC_VECTOR ( 0 downto 0 );
     m_axi_card_mem0_arlen : out STD_LOGIC_VECTOR ( 7 downto 0 );
     m_axi_card_mem0_arlock : out STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_arprot : out STD_LOGIC_VECTOR ( 2 downto 0 );
@@ -425,7 +425,7 @@ ARCHITECTURE STRUCTURE OF action_wrapper IS
     m_axi_card_mem0_awaddr : out STD_LOGIC_VECTOR ( 63 downto 0 );
     m_axi_card_mem0_awburst : out STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_awcache : out STD_LOGIC_VECTOR ( 3 downto 0 );
-    m_axi_card_mem0_awid : out STD_LOGIC_VECTOR ( 3 downto 0 );
+    m_axi_card_mem0_awid : out STD_LOGIC_VECTOR ( 0 downto 0 );
     m_axi_card_mem0_awlen : out STD_LOGIC_VECTOR ( 7 downto 0 );
     m_axi_card_mem0_awlock : out STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_awprot : out STD_LOGIC_VECTOR ( 2 downto 0 );
@@ -435,20 +435,20 @@ ARCHITECTURE STRUCTURE OF action_wrapper IS
     m_axi_card_mem0_awsize : out STD_LOGIC_VECTOR ( 2 downto 0 );
     m_axi_card_mem0_awuser : out STD_LOGIC_VECTOR ( 0 to 0 );
     m_axi_card_mem0_awvalid : out STD_LOGIC;
-    m_axi_card_mem0_bid : in STD_LOGIC_VECTOR ( 3 downto 0 );
+    m_axi_card_mem0_bid : in STD_LOGIC_VECTOR ( 0 downto 0 );
     m_axi_card_mem0_bready : out STD_LOGIC;
     m_axi_card_mem0_bresp : in STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_buser : in STD_LOGIC_VECTOR ( 0 to 0 );
     m_axi_card_mem0_bvalid : in STD_LOGIC;
     m_axi_card_mem0_rdata : in STD_LOGIC_VECTOR ( 511 downto 0 );
-    m_axi_card_mem0_rid : in STD_LOGIC_VECTOR ( 3 downto 0 );
+    m_axi_card_mem0_rid : in STD_LOGIC_VECTOR ( 0 downto 0 );
     m_axi_card_mem0_rlast : in STD_LOGIC;
     m_axi_card_mem0_rready : out STD_LOGIC;
     m_axi_card_mem0_rresp : in STD_LOGIC_VECTOR ( 1 downto 0 );
     m_axi_card_mem0_ruser : in STD_LOGIC_VECTOR ( 0 to 0 );
     m_axi_card_mem0_rvalid : in STD_LOGIC;
     m_axi_card_mem0_wdata : out STD_LOGIC_VECTOR ( 511 downto 0 );
-    m_axi_card_mem0_wid : out STD_LOGIC_VECTOR ( 3 downto 0 );
+    m_axi_card_mem0_wid : out STD_LOGIC_VECTOR ( 0 downto 0 );
     m_axi_card_mem0_wlast : out STD_LOGIC;
     m_axi_card_mem0_wready : in STD_LOGIC;
     m_axi_card_mem0_wstrb : out STD_LOGIC_VECTOR ( 63 downto 0 );
@@ -612,7 +612,7 @@ BEGIN
     m_axi_card_mem0_araddr(63 DOWNTO 32) => m_axi_card_mem0_araddr_open,
     m_axi_card_mem0_arburst => m_axi_card_mem0_arburst,
     m_axi_card_mem0_arcache => m_axi_card_mem0_arcache,
-    m_axi_card_mem0_arid => m_axi_card_mem0_arid,
+    m_axi_card_mem0_arid => m_axi_card_mem0_arid(0 downto 0),
     m_axi_card_mem0_arlen => m_axi_card_mem0_arlen,
     m_axi_card_mem0_arlock => m_axi_card_mem0_arlock,
     m_axi_card_mem0_arprot => m_axi_card_mem0_arprot,
@@ -626,7 +626,7 @@ BEGIN
     m_axi_card_mem0_awaddr(63 DOWNTO 32) => m_axi_card_mem0_awaddr_open,
     m_axi_card_mem0_awburst => m_axi_card_mem0_awburst,
     m_axi_card_mem0_awcache => m_axi_card_mem0_awcache,
-    m_axi_card_mem0_awid => m_axi_card_mem0_awid,
+    m_axi_card_mem0_awid => m_axi_card_mem0_awid(0 downto 0),
     m_axi_card_mem0_awlen => m_axi_card_mem0_awlen,
     m_axi_card_mem0_awlock => m_axi_card_mem0_awlock,
     m_axi_card_mem0_awprot => m_axi_card_mem0_awprot,
@@ -636,13 +636,13 @@ BEGIN
     m_axi_card_mem0_awsize => m_axi_card_mem0_awsize,
     m_axi_card_mem0_awuser => m_axi_card_mem0_awuser,
     m_axi_card_mem0_awvalid => m_axi_card_mem0_awvalid,
-    m_axi_card_mem0_bid => m_axi_card_mem0_bid,
+    m_axi_card_mem0_bid => m_axi_card_mem0_bid(0 downto 0),
     m_axi_card_mem0_bready => m_axi_card_mem0_bready,
     m_axi_card_mem0_bresp => m_axi_card_mem0_bresp,
     m_axi_card_mem0_buser => m_axi_card_mem0_buser,
     m_axi_card_mem0_bvalid => m_axi_card_mem0_bvalid,
     m_axi_card_mem0_rdata => m_axi_card_mem0_rdata,
-    m_axi_card_mem0_rid => m_axi_card_mem0_rid,
+    m_axi_card_mem0_rid => m_axi_card_mem0_rid(0 downto 0),
     m_axi_card_mem0_rlast => m_axi_card_mem0_rlast,
     m_axi_card_mem0_rready => m_axi_card_mem0_rready,
     m_axi_card_mem0_rresp => m_axi_card_mem0_rresp,

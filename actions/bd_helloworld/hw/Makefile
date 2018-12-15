@@ -14,8 +14,19 @@
 # limitations under the License.
 #
 
-#vhd_srcs=$(wildcard *.vhd_source)
-#vhd_files=$(vhd_srcs:.vhd_source=.vhd)
+vhd_srcs=$(wildcard *.vhd_source)
+vhd_files=$(vhd_srcs:.vhd_source=.vhd)
+
+# Finding $SNAP_ROOT
+ifndef SNAP_ROOT
+# check if we are in hw folder of an action (three directories below snap root)
+ifneq ("$(wildcard ../../../ActionTypes.md)","")
+SNAP_ROOT=$(abspath ../../../)
+else
+$(info You are not building your software from the default directory (/path/to/snap/actions/<action_name>/sw) or specified a wrong $$SNAP_ROOT.)
+$(error Please make sure that $$SNAP_ROOT is set up correctly.)
+endif
+endif
 
 ACTION_ROOT ?= $(PWD)/..
 
@@ -25,7 +36,7 @@ all: config
 
 config:
 	$(info Call action_config.sh (creating action IPs))
-	./action_config.sh
+	@SNAP_ROOT=$(SNAP_ROOT) ./action_config.sh
 
 clean:
 	$(info Also clean up action ip project...)

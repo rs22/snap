@@ -27,24 +27,39 @@
 
 # Finding $SNAP_ROOT
 ifndef SNAP_ROOT
-# check if we are in sw folder of an action (three directories below snap root)
-ifneq ("$(wildcard ../../../ActionTypes.md)","")
-SNAP_ROOT=$(abspath ../../../)
+# check if we are in hw/hls/hls_* folder of an action (five directories below snap root)
+ifneq ("$(wildcard ../../../../../ActionTypes.md)","")
+SNAP_ROOT=$(abspath ../../../../../)
 else
 $(info You are not building your software from the default directory (/path/to/snap/actions/<action_name>/sw) or specified a wrong $$SNAP_ROOT.)
 $(error Please make sure that $$SNAP_ROOT is set up correctly.)
 endif
 endif
 
-# This is solution specific. Check if we can replace this by generics too.
+SOLUTION_NAME ?= hls_changecase
+SOLUTION_DIR ?= hls_changecase
+srcs += hls_changecase.cpp
 
-snap_helloworld: action_lowercase.o
-snap_helloworld_objs = action_lowercase.o
+WRAPPER ?= hls_changecase
 
-projs += snap_helloworld
+HLS_CFLAGS ?= ""
+ifeq ($(DDRI_USED),TRUE)
+HLS_CFLAGS += -DDRAM_ENABLED
+endif
+ifeq ($(NVME_USED),TRUE)
+HLS_CFLAGS += -DNVME_ENABLED
+endif
 
-# If you have the host code outside of the default snap directory structure,
-# change to /path/to/snap/actions/software.mk
-include $(SNAP_ROOT)/actions/software.mk
+include $(SNAP_ROOT)/actions/hls.mk
 
-CFLAGS += -I../hw/hls/include
+run_hls_ip_script.tcl: run_hls_script.tcl
+	@sed "s/#export_design/export_design/g" $< > $@
+
+ip_dir=$(SOLUTION_DIR)_$(PART_NUMBER)/$(SOLUTION_NAME)/impl/ip
+
+$(ip_dir): run_hls_ip_script.tcl $(srcs)
+	vivado_hls -f run_hls_ip_script.tcl
+
+# Create symlinks for simpler access
+ip: $(ip_dir)
+	@$(RM) hls_impl_ip && ln -s $(ip_dir) hls_impl_ip
