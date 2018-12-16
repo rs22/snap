@@ -111,7 +111,7 @@ if { ( $::env(DDRI_USED) == "TRUE" ) } {
     create_bd_cell -type ip -vlnv xilinx.com:ip:axi_crossbar:2.1 axi_crossbar
     connect_bd_intf_net [get_bd_intf_pins axi_datamover/M_AXI] [get_bd_intf_pins axi_crossbar/S00_AXI]
 
-    # connect_bd_intf_net [get_bd_intf_pins axi_crossbar/M01_AXI] [get_bd_intf_pins axi_host_mem_crossbar/S01_AXI]
+    connect_bd_intf_net [get_bd_intf_pins axi_crossbar/M00_AXI] [get_bd_intf_pins axi_host_mem_crossbar/S01_AXI]
 
     make_bd_intf_pins_external  [get_bd_intf_pins axi_crossbar/M01_AXI]
     set_property name m_axi_card_mem0 [get_bd_intf_ports M01_AXI_0]
@@ -124,6 +124,18 @@ if { ( $::env(DDRI_USED) == "TRUE" ) } {
 
     connect_bd_net [get_bd_ports ap_clk] [get_bd_pins axi_crossbar/aclk]
     connect_bd_net [get_bd_ports ap_rst_n] [get_bd_pins axi_crossbar/aresetn]
+
+    assign_bd_address [get_bd_addr_segs {m_axi_host_mem/Reg }] >> $log_file
+    assign_bd_address [get_bd_addr_segs {m_axi_card_mem0/Reg }] >> $log_file
+
+    set_property offset 0x0000000000000000 [get_bd_addr_segs {hls_action/Data_m_axi_host_mem/SEG_m_axi_host_mem_Reg}]
+    set_property range 16E [get_bd_addr_segs {hls_action/Data_m_axi_host_mem/SEG_m_axi_host_mem_Reg}]
+    
+    set_property offset 0x8000000000000000 [get_bd_addr_segs {axi_datamover/Data/SEG_m_axi_card_mem0_Reg}]
+    set_property range 8E [get_bd_addr_segs {axi_datamover/Data/SEG_m_axi_card_mem0_Reg}]
+
+    set_property offset 0x0000000000000000 [get_bd_addr_segs {axi_datamover/Data/SEG_m_axi_host_mem_Reg}]
+    set_property range 8E [get_bd_addr_segs {axi_datamover/Data/SEG_m_axi_host_mem_Reg}]
 } else {
     connect_bd_intf_net [get_bd_intf_pins axi_datamover/M_AXI] [get_bd_intf_pins axi_host_mem_crossbar/S01_AXI]
 
@@ -134,11 +146,9 @@ if { ( $::env(DDRI_USED) == "TRUE" ) } {
     set_property range 16E [get_bd_addr_segs {axi_datamover/Data/SEG_m_axi_host_mem_Reg}]
 }
 
-assign_bd_address >> $log_file
-
-assign_bd_address [get_bd_addr_segs {hls_action/s_axi_ctrl_reg/Reg }]
+assign_bd_address [get_bd_addr_segs {hls_action/s_axi_ctrl_reg/Reg }] >> $log_file
 
 save_bd_design >> $log_file
 
 set_property synth_checkpoint_mode None [get_files  $src_dir/../bd/$bd_name/$bd_name.bd]
-generate_target all                     [get_files  $src_dir/../bd/$bd_name/$bd_name.bd] >> $log_file
+# generate_target all                     [get_files  $src_dir/../bd/$bd_name/$bd_name.bd] >> $log_file

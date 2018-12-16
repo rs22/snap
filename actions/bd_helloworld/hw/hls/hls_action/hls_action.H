@@ -1,5 +1,5 @@
-#ifndef __ACTION_UPPERCASE_H__
-#define __ACTION_UPPERCASE_H__
+#ifndef __HLS_ACTION_H__
+#define __HLS_ACTION_H__
 
 /*
  * Copyright 2017 International Business Machines
@@ -39,4 +39,4 @@ typedef struct {
 	uint8_t padding[SNAP_HLS_JOBSIZE - sizeof(helloworld_job_t)];
 } action_reg;
 
-#endif  /* __ACTION_UPPERCASE_H__*/
+#endif  /* __HLS_ACTION_H__*/
