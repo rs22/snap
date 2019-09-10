@@ -13,6 +13,12 @@ choice
 	  There are multiple card the framework supports. Please select
 	  one of them. Pay attention to CAPI level (eg CAPI10 or CAPI20)
 
+	config WEBPACK_SIM
+		bool "CAPI1.0: Dummy configuration for simulating with Vivado WebPack"
+		select CAPI10
+		help
+		  WebPack simulation dummy configuration
+
 	config N250S
 		bool "CAPI1.0: Nallatech 250S with 4GB DDR4 SDRAM, NVMe and Xilinx KU60 FPGA"
 		select CAPI10
@@ -99,6 +105,7 @@ endchoice
 config FPGACARD
 	string
 	default "N250S"  if N250S
+	default "WEBPACK_SIM"  if WEBPACK_SIM
 	default "N250SP" if N250SP
 	default "ADKU3"  if ADKU3
 	default "S121B"  if S121B_BPIx16 || S121B_SPIx4
@@ -111,7 +118,7 @@ config FPGACARD
 
 config FLASH_INTERFACE
 	string
-	default "BPIx16" if S121B_BPIx16 || N250S || N250SP || ADKU3 || AD8K5
+	default "BPIx16" if S121B_BPIx16 || N250S || N250SP || ADKU3 || AD8K5 || WEBPACK_SIM
 	default "SPIx4"  if S121B_SPIx4 || FX609 || S241 || U200
 	default "SPIx8"  if RCXVUP || AD9V3
 
@@ -119,7 +126,7 @@ config FLASH_INTERFACE
 config FLASH_SIZE
 	string
 	default 256 if S121B_SPIx4  || RCXVUP || S241
-	default 128 if S121B_BPIx16 || N250SP || AD8K5 || ADKU3 || FX609 || U200
+	default 128 if S121B_BPIx16 || N250SP || AD8K5 || ADKU3 || FX609 || U200 || WEBPACK_SIM
 	default 64  if N250S || AD9V3
 
 #FLASH_FACTORYADDR: For all cards, factory address is 0x0
@@ -132,7 +139,7 @@ config FLASH_FACTORYADDR
 config FLASH_USERADDR
 	string
 	default 0x01000000 if N250S || ADKU3
-	default 0x02000000 if S121B_BPIx16 || AD8K5 || N250SP || AD9V3
+	default 0x02000000 if S121B_BPIx16 || AD8K5 || N250SP || AD9V3 || WEBPACK_SIM
 	default 0x04000000 if FX609
 	default 0x08000000 if S121B_SPIx4 || RCXVUP || S241
 	default 0x01002000 if U200
@@ -152,6 +159,7 @@ config CAPI20
 
 config FPGACHIP
 	string
+	default "xcku035-ffva1156-2-e" if WEBPACK_SIM
 	default "xcku060-ffva1156-2-e" if N250S || ADKU3
 	default "xcku115-flva1517-2-e" if S121B_BPIx16 || S121B_SPIx4
 	default "xcku15p-ffva1156-2-i" if N250SP
@@ -164,7 +172,7 @@ config FPGACHIP
 
 config FPGABOARD
 	string
-	default "xilinx.com:au200:part0:1.0" if U200 
+	default "xilinx.com:au200:part0:1.0" if U200
 
 config NUM_OF_ACTIONS
 	int
@@ -207,7 +215,7 @@ choice
 
 	config HDL_NVME_EXAMPLE
 		bool "HDL NVMe Example"
-		depends on N250S
+		depends on (N250S || WEBPACK_SIM)
 		select FORCE_SDRAM_OR_BRAM
 		select FORCE_NVME
 
@@ -246,7 +254,7 @@ choice
 
 	config HLS_NVME_MEMCOPY
 		bool "HLS NVMe Memcopy"
-		depends on N250S
+		depends on (N250S || WEBPACK_SIM)
 		select ENABLE_HLS_SUPPORT
 		select FORCE_SDRAM_OR_BRAM
 		select FORCE_NVME
@@ -313,7 +321,7 @@ choice
 		select ENABLE_HLS_SUPPORT
 		select DISABLE_SDRAM_AND_BRAM
 		select DISABLE_NVME
-	
+
 	config HLS_MM_TEST
 		bool "HLS WED/STATUS Sharing and MatrixMultiply"
 		help
@@ -344,17 +352,17 @@ choice
 	config HLS_SCATTER_GATHER
 		bool "HLS Scatter Gather (CAPI2.0 only)"
 		help
-		  This example will help user understanding how to optimize code for 
-		   scatter gather memory access. It will show how Software and Hardware 
+		  This example will help user understanding how to optimize code for
+		   scatter gather memory access. It will show how Software and Hardware
 		   share WED (Work Element Descriptor) and STATUS in host memory.
-		  This can be used as a benchmark to see how CAPI help reduce the 
+		  This can be used as a benchmark to see how CAPI help reduce the
 		   data moving latency when the data are scattered everywhere in RAM.
 		  This example is written in C and compiled with HLS
 		select ENABLE_HLS_SUPPORT
 		select DISABLE_SDRAM_AND_BRAM
 		select DISABLE_NVME
 		select ENABLE_ACTION_CLK_DERATE
-	
+
     config HLS_VECTOR_GENERATOR
 		bool "HLS Vector Generator example"
         help
@@ -581,7 +589,7 @@ config ENABLE_USER_HLS_ACTION_CLK
 	  Default clock is 250MHz (4ns).
 	  By changing the value of the HLS action clock, user can
 	  overconstrain the HLS synthesis and get different synthesis results.
-	  This option enables or disables in the file snap_env.sh the use of 
+	  This option enables or disables in the file snap_env.sh the use of
           the variable HLS_CLOCK_PERIOD_CONSTRAINT="4ns"
 	  This modification will not change the frequency used to synthesize the
           whole FPGA, but will disable the automatic timing violation testing done
